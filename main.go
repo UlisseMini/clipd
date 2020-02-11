@@ -6,12 +6,19 @@ import (
 	"log"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/atotto/clipboard"
 )
 
 const maxClipSize = 100000 // 100kb
+
+// Our current clipboard, for reference
+var currentCB string
+
+// mutex protecting clipboard
+var mu sync.Mutex
 
 // reader is ran in a goroutine to read new clipboard states from the server.
 func reader(srv net.Conn) {
@@ -33,6 +40,11 @@ func reader(srv net.Conn) {
 			}
 		}
 
+		func() {
+			mu.Lock()
+			defer mu.Unlock()
+			currentCB = buf
+		}()
 		if err := clipboard.WriteAll(buf); err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 			break // TODO: Retry
@@ -46,14 +58,13 @@ func main() {
 		panic("clipboard not supported")
 	}
 
-	serverConn, err := net.Dial("tcp", "192.168.86.47:1337")
+	serverConn, err := net.Dial("tcp", "localhost:1337")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer func() { must(serverConn.Close()) }()
 	log.Printf("Connected to %s", serverConn.RemoteAddr())
 
-	var oldCB string
 	go func() {
 		reader(serverConn)
 		log.Fatal("reader exited")
@@ -68,7 +79,7 @@ func main() {
 			continue
 		}
 
-		if cb != oldCB {
+		if cb != currentCB {
 			log.Printf("Sending new clipboard %q", cb)
 			err := enc.Encode(&cb)
 			if err != nil {
@@ -76,7 +87,11 @@ func main() {
 				log.Fatal(err)
 			}
 
-			oldCB = cb
+			func() {
+				mu.Lock()
+				defer mu.Unlock()
+				currentCB = cb
+			}()
 		}
 	}
 }
