@@ -31,10 +31,9 @@ type server struct {
 // setClipboard sets the clipboard of the server, and notifies all clients.
 // it is threadsafe.
 func (s *server) setClipboard(cb string) {
-	log.Printf("setting clipboard to %q, aquiring lock...", cb)
+	log.Printf("setting clipboard to %q", cb)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	log.Printf("lock aquired")
 	s.clipboard = cb
 
 	// for clients that need to be deleted
