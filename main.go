@@ -37,6 +37,7 @@ func reader(srv net.Conn) {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 			break // TODO: Retry
 		}
+		log.Printf("Set clipboard to %q", buf)
 	}
 }
 
@@ -45,11 +46,12 @@ func main() {
 		panic("clipboard not supported")
 	}
 
-	serverConn, err := connectToServer()
+	serverConn, err := net.Dial("tcp", "192.168.86.47:1337")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer func() { must(serverConn.Close()) }()
+	log.Printf("Connected to %s", serverConn.RemoteAddr())
 
 	var oldCB string
 	go func() {
@@ -67,6 +69,7 @@ func main() {
 		}
 
 		if cb != oldCB {
+			log.Printf("Sending new clipboard %q", cb)
 			err := enc.Encode(&cb)
 			if err != nil {
 				// TODO: retry if temporary
@@ -76,11 +79,6 @@ func main() {
 			oldCB = cb
 		}
 	}
-}
-
-func connectToServer() (net.Conn, error) {
-	// Eventually scan local network or connect to central server
-	return net.Dial("tcp", "localhost:1337")
 }
 
 func must(err error) {
