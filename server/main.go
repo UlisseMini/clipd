@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/gob"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -59,8 +61,11 @@ func (s *server) setClipboard(cb string) {
 	}()
 
 	for i := range deleteIndexes {
+
+		s.clients[i] = s.clients[len(s.clients)-1] // set it to the last one
+		s.clients = s.clients[:len(s.clients)-1]   // chop off the last one
+
 		log.Printf("Removed client %s", s.clients[i])
-		s.clients = append(s.clients[:i], s.clients[i+1:]...)
 	}
 }
 
@@ -100,9 +105,12 @@ func newServer() *server {
 	}
 }
 
-// tcpClient works over tcp
+// tcpClient works over tcp using gob (encoding/gob)
 type tcpClient struct {
-	conn      net.Conn
+	conn net.Conn
+	enc  *gob.Encoder
+	dec  *gob.Decoder
+
 	out       chan string
 	bufsize   int
 	clipboard string
@@ -113,7 +121,7 @@ func (t *tcpClient) update(cb string) error {
 		return nil
 	}
 
-	_, err := t.conn.Write([]byte(cb))
+	err := t.enc.Encode(cb)
 	log.Printf("Wrote new clipboard %q to %s", cb, t.conn.RemoteAddr())
 	return err
 }
@@ -127,16 +135,16 @@ func (t *tcpClient) String() string {
 }
 
 func (t *tcpClient) run() error {
-	buf := make([]byte, t.bufsize)
+	var buf string
 	for {
-		n, err := t.conn.Read(buf)
+		dec := gob.NewDecoder(io.LimitReader(t.conn, int64(t.bufsize)))
+		err := dec.Decode(&buf)
 		if err != nil {
 			return err
 		}
-		log.Printf("Read %d bytes from %s", n, t.conn.RemoteAddr())
 
-		t.clipboard = string(buf[:n])
-		t.out <- string(buf[:n])
+		t.clipboard = buf
+		t.out <- buf
 	}
 }
 
@@ -144,6 +152,7 @@ func handle(s *server, conn net.Conn) {
 	log.Printf("Handling %s", conn.RemoteAddr())
 	c := &tcpClient{
 		conn:    conn,
+		enc:     gob.NewEncoder(conn),
 		out:     make(chan string),
 		bufsize: 1024,
 	}

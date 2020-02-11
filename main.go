@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/gob"
 	"fmt"
 	"log"
 	"net"
@@ -14,12 +15,13 @@ const maxClipSize = 100000 // 100kb
 
 // reader is ran in a goroutine to read new clipboard states from the server.
 func reader(srv net.Conn) {
-	buf := make([]byte, maxClipSize)
+	var buf string
 
 	for {
 		time.Sleep(time.Second)
 
-		n, err := srv.Read(buf)
+		dec := gob.NewDecoder(srv)
+		err := dec.Decode(&buf)
 		if err != nil {
 			if isTemp(err) {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -31,7 +33,7 @@ func reader(srv net.Conn) {
 			}
 		}
 
-		if err := clipboard.WriteAll(string(buf[:n])); err != nil {
+		if err := clipboard.WriteAll(buf); err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 			break // TODO: Retry
 		}
@@ -52,22 +54,27 @@ func main() {
 	var oldCB string
 	go func() {
 		reader(serverConn)
-		os.Exit(1) // TODO: More graceful exit
+		log.Fatal("reader exited")
 	}()
 
+	enc := gob.NewEncoder(serverConn)
 	for {
+		time.Sleep(time.Second)
+
 		cb, err := clipboard.ReadAll()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			return
+			continue
 		}
 
 		if cb != oldCB {
-			serverConn.Write([]byte(cb))
+			err := enc.Encode(&cb)
+			if err != nil {
+				// TODO: retry if temporary
+				log.Fatal(err)
+			}
+
 			oldCB = cb
 		}
-
-		time.Sleep(time.Second)
 	}
 }
 
