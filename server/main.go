@@ -35,16 +35,32 @@ func (s *server) setClipboard(cb string) {
 	log.Printf("lock aquired")
 	s.clipboard = cb
 
-	// TODO: use goroutines to make this process faster, each client update()
-	// uses the network.
+	// for clients that need to be deleted
+	deleteIndexes := make(chan int)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(len(s.clients))
 	for i := 0; i < len(s.clients); i++ {
 		client := s.clients[i]
-		err := client.update(cb)
-		if err != nil {
-			// remove this client from the list, since they caused an error
-			s.clients = append(s.clients[:i], s.clients[i+1:]...)
-			log.Printf("Removed client %s because of %v", client, err)
-		}
+		go func(i int) {
+			defer wg.Done()
+			err := client.update(cb)
+			if err != nil {
+				// remove this client from the list, since they caused an error
+				log.Printf("Removing client %s because of %v", client, err)
+				deleteIndexes <- i
+			}
+		}(i)
+	}
+
+	go func() {
+		wg.Wait()
+		close(deleteIndexes)
+	}()
+
+	for i := range deleteIndexes {
+		log.Printf("Removed client %s", s.clients[i])
+		s.clients = append(s.clients[:i], s.clients[i+1:]...)
 	}
 }
 
