@@ -179,6 +179,7 @@ func main() {
 		log.Panic(s.run())
 	}()
 
+	log.Printf("Listening on port %s...", *port)
 	for {
 		conn, err := l.Accept()
 		if err != nil {
