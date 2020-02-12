@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/gob"
+	"flag"
 	"io"
 	"log"
 	"net"
@@ -163,7 +164,11 @@ func handle(s *server, conn net.Conn) {
 }
 
 func main() {
-	l, err := net.Listen("tcp", ":1337")
+	port := new(string)
+	flag.StringVar(port, "p", "1337", "port for the server to listen on")
+	flag.Parse()
+
+	l, err := net.Listen("tcp", ":"+*port)
 	if err != nil {
 		log.Fatal(err)
 	}
