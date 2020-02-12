@@ -58,7 +58,18 @@ func main() {
 		panic("clipboard not supported")
 	}
 
-	serverConn, err := net.Dial("tcp", "localhost:1337")
+	if len(os.Args) < 2 {
+		fmt.Fprintf(os.Stderr, "Usage: %s <server ip> [server port]\n", os.Args[0])
+		os.Exit(1)
+	}
+
+	port := "1337"
+	if len(os.Args) > 2 {
+		port = os.Args[2]
+	}
+	raddr := os.Args[1] + ":" + port
+
+	serverConn, err := net.Dial("tcp", raddr)
 	if err != nil {
 		log.Fatal(err)
 	}
